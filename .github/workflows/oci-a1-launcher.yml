@@ -11,12 +11,12 @@ concurrency:
 
 jobs:
   launch:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 350
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 
@@ -24,18 +24,28 @@ jobs:
         run: pip install oci-cli
 
       - name: Configure OCI CLI
+        env:
+          OCI_KEY: ${{ secrets.OCI_KEY }}
+          OCI_USER: ${{ secrets.OCI_USER }}
+          OCI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
+          OCI_TENANCY: ${{ secrets.OCI_TENANCY }}
         run: |
           mkdir -p ~/.oci
-          echo "${{ secrets.OCI_KEY }}" > ~/.oci/key.pem
-          cat > ~/.oci/config <<EOF
-          [DEFAULT]
-          user=${{ secrets.OCI_USER }}
-          fingerprint=${{ secrets.OCI_FINGERPRINT }}
-          tenancy=${{ secrets.OCI_TENANCY }}
-          region=af-casablanca-1
-          key_file=~/.oci/key.pem
-          EOF
+          printf '%s\n' "$OCI_KEY" | tr -d '\r' > ~/.oci/key.pem
+          {
+            echo "[DEFAULT]"
+            echo "user=$OCI_USER"
+            echo "fingerprint=$OCI_FINGERPRINT"
+            echo "tenancy=$OCI_TENANCY"
+            echo "region=af-casablanca-1"
+            echo "key_file=$HOME/.oci/key.pem"
+          } > ~/.oci/config
           chmod 600 ~/.oci/key.pem ~/.oci/config
+
+      - name: Test OCI login
+        env:
+          OCI_CLI_SUPPRESS_FILE_PERMISSIONS_WARNING: "True"
+        run: oci iam availability-domain list --query 'data[0].name' --raw-output
 
       - name: Try to launch A1 instance
         env:
@@ -43,4 +53,6 @@ jobs:
           OCI_CLI_SUPPRESS_FILE_PERMISSIONS_WARNING: "True"
           MAX_MINUTES: "330"
           SLEEP: "90"
-        run: bash launch_a1.sh
+        run: |
+          sed -i 's/\r$//' launch_a1.sh    # fix Windows line endings
+          bash launch_a1.sh
