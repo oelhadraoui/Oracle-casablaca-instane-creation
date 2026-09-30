@@ -1,0 +1,46 @@
+name: oci-a1-launcher
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"     # start a new ~5.5h run every 6 hours
+  workflow_dispatch:           # "Run workflow" button for the first start
+
+concurrency:
+  group: oci-a1
+  cancel-in-progress: false
+
+jobs:
+  launch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install OCI CLI
+        run: pip install oci-cli
+
+      - name: Configure OCI CLI
+        run: |
+          mkdir -p ~/.oci
+          echo "${{ secrets.OCI_KEY }}" > ~/.oci/key.pem
+          cat > ~/.oci/config <<EOF
+          [DEFAULT]
+          user=${{ secrets.OCI_USER }}
+          fingerprint=${{ secrets.OCI_FINGERPRINT }}
+          tenancy=${{ secrets.OCI_TENANCY }}
+          region=af-casablanca-1
+          key_file=~/.oci/key.pem
+          EOF
+          chmod 600 ~/.oci/key.pem ~/.oci/config
+
+      - name: Try to launch A1 instance
+        env:
+          OCI_TENANCY: ${{ secrets.OCI_TENANCY }}
+          OCI_CLI_SUPPRESS_FILE_PERMISSIONS_WARNING: "True"
+          MAX_MINUTES: "330"
+          SLEEP: "90"
+        run: bash launch_a1.sh
